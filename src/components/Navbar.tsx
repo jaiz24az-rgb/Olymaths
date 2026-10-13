@@ -9,12 +9,13 @@ import {
   ShieldCheck, 
   Sparkles,
   BookOpen,
-  Swords
+  Swords,
+  History
 } from 'lucide-react';
 import { UserProfile, DailyReminderConfig } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 
-export type ActiveTab = 'practice' | 'duel' | 'cheatsheet' | 'daily' | 'leaderboard' | 'analytics' | 'parent';
+export type ActiveTab = 'practice' | 'history' | 'duel' | 'cheatsheet' | 'daily' | 'leaderboard' | 'analytics' | 'parent';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -62,6 +63,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             Arena Latihan
+          </button>
+          <button
+            onClick={() => onSelectTab('history')}
+            className={`transition-colors whitespace-nowrap shrink-0 pb-1 flex items-center gap-1 ${
+              activeTab === 'history'
+                ? 'text-blue-600 border-b-2 border-blue-600 font-extrabold'
+                : 'hover:text-slate-900 text-slate-600'
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Riwayat Soal</span>
           </button>
           <button
             onClick={() => onSelectTab('cheatsheet')}
@@ -191,6 +203,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           Arena Latihan
+        </button>
+        <button
+          onClick={() => onSelectTab('history')}
+          className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1 ${
+            activeTab === 'history' ? 'bg-white text-blue-700 shadow-xs font-bold' : 'text-slate-600'
+          }`}
+        >
+          <History className="w-3.5 h-3.5" />
+          <span>Riwayat Soal</span>
         </button>
         <button
           onClick={() => onSelectTab('cheatsheet')}

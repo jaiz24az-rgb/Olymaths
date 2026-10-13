@@ -35,6 +35,7 @@ export interface Question {
 }
 
 export interface AnswerRecord {
+  id?: string;
   questionId: string;
   topic: TopicCategory;
   difficulty: DifficultyLevel;
@@ -43,6 +44,7 @@ export interface AnswerRecord {
   timeSpentSec: number;
   timestamp: number;
   pointsEarned: number;
+  questionSnapshot?: Question;
 }
 
 export interface Badge {

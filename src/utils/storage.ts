@@ -1,5 +1,6 @@
-import { UserProfile, AnswerRecord, DailyReminderConfig, Badge, TopicCategory } from '../types';
+import { UserProfile, AnswerRecord, DailyReminderConfig, Badge, TopicCategory, Question } from '../types';
 import { INITIAL_BADGES, LEVEL_TIERS } from '../data/badges';
+import { INITIAL_QUESTIONS } from '../data/questions';
 
 const PROFILE_KEY = 'olimpiade_sd4_profile';
 const ANSWERS_KEY = 'olimpiade_sd4_answers';
@@ -58,14 +59,39 @@ export function getStoredAnswers(): AnswerRecord[] {
   }
 }
 
+export function getStoredAnswersWithDetails(): (AnswerRecord & { resolvedQuestion?: any })[] {
+  const records = getStoredAnswers();
+  return records.map((rec) => {
+    let q = rec.questionSnapshot;
+    if (!q) {
+      q = INITIAL_QUESTIONS.find((item) => item.id === rec.questionId);
+    }
+    return {
+      ...rec,
+      resolvedQuestion: q,
+    };
+  });
+}
+
 export function saveAnswerRecord(record: AnswerRecord): void {
   try {
     const answers = getStoredAnswers();
-    // remove previous attempt for same question if needed or keep history
-    answers.unshift(record);
+    const enrichedRecord: AnswerRecord = {
+      ...record,
+      id: record.id || `ans_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    };
+    answers.unshift(enrichedRecord);
     localStorage.setItem(ANSWERS_KEY, JSON.stringify(answers));
   } catch (e) {
     console.error('Failed to save answer record', e);
+  }
+}
+
+export function clearAnswerHistory(): void {
+  try {
+    localStorage.removeItem(ANSWERS_KEY);
+  } catch (e) {
+    console.error('Failed to clear answer history', e);
   }
 }
 

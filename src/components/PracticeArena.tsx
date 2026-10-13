@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Sparkles, 
   HelpCircle, 
@@ -11,8 +11,11 @@ import {
   SlidersHorizontal,
   ChevronRight,
   BookOpen,
-  Award,
-  Target
+  Award, 
+  Target,
+  History,
+  Dices,
+  RefreshCw
 } from 'lucide-react';
 import { Question, DifficultyLevel, TopicCategory, UserProfile, AnswerRecord } from '../types';
 import { INITIAL_QUESTIONS, TOPICS } from '../data/questions';
@@ -30,12 +33,20 @@ import {
   evaluateBadgesAfterAnswer, 
   computeAdaptiveDifficulty 
 } from '../utils/gamification';
+import { 
+  getSessionQuestionPool, 
+  startNewSession, 
+  shuffleArray 
+} from '../utils/questionManager';
 
 interface PracticeArenaProps {
   profile: UserProfile;
   onProfileUpdated: (profile: UserProfile) => void;
   onOpenBadges: () => void;
   onOpenCheatSheet?: () => void;
+  onOpenHistory?: () => void;
+  initialQuestionToRetry?: Question | null;
+  onClearRetryQuestion?: () => void;
 }
 
 export const PracticeArena: React.FC<PracticeArenaProps> = ({
@@ -43,13 +54,17 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
   onProfileUpdated,
   onOpenBadges,
   onOpenCheatSheet,
+  onOpenHistory,
+  initialQuestionToRetry,
+  onClearRetryQuestion,
 }) => {
   const [selectedTopic, setSelectedTopic] = useState<TopicCategory | 'all' | 'omnas'>('all');
   const [difficultyMode, setDifficultyMode] = useState<'adaptive' | 'manual'>('adaptive');
   const [manualDifficulty, setManualDifficulty] = useState<DifficultyLevel>('sedang');
   const [showQuickTrickEarly, setShowQuickTrickEarly] = useState(false);
+  const [sessionSeed, setSessionSeed] = useState<number>(() => Date.now());
   
-  // Current question index & filtered list
+  // Current question index & active pool
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
@@ -58,41 +73,61 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
   const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
   const [newBadgeAlert, setNewBadgeAlert] = useState<string | null>(null);
 
-  // Filter questions based on topic and adaptive/manual difficulty
   const effectiveDifficulty: DifficultyLevel = difficultyMode === 'adaptive'
     ? profile.adaptiveDifficulty
     : manualDifficulty;
 
-  const filteredQuestions = INITIAL_QUESTIONS.filter((q) => {
-    if (selectedTopic === 'omnas') {
-      return !!q.source?.includes('OMNAS');
+  // Retrieve smart question pool (unanswered first, shuffled per session, with dynamic questions included)
+  const { currentQuestionList, unansweredCount } = useMemo(() => {
+    // If user clicked "Coba Ulang" from History
+    if (initialQuestionToRetry) {
+      return {
+        currentQuestionList: [initialQuestionToRetry],
+        unansweredCount: 0,
+      };
     }
-    const matchTopic = selectedTopic === 'all' || q.topic === selectedTopic;
-    const matchDifficulty = q.difficulty === effectiveDifficulty;
-    return matchTopic && matchDifficulty;
-  });
 
-  // Fallback if no questions in specific filter
-  const currentQuestionList = filteredQuestions.length > 0
-    ? filteredQuestions
-    : INITIAL_QUESTIONS.filter((q) => {
-        if (selectedTopic === 'omnas') return !!q.source?.includes('OMNAS');
-        return selectedTopic === 'all' || q.topic === selectedTopic;
-      });
+    const { questions, unansweredCount } = getSessionQuestionPool({
+      topic: selectedTopic,
+      difficulty: effectiveDifficulty,
+      difficultyMode,
+      includeDynamic: true,
+    });
+
+    return {
+      currentQuestionList: questions,
+      unansweredCount,
+    };
+  }, [selectedTopic, effectiveDifficulty, difficultyMode, sessionSeed, initialQuestionToRetry]);
 
   const currentQuestion: Question | undefined = currentQuestionList[activeQuestionIndex % currentQuestionList.length];
 
+  // Answered count in history for the button badge
+  const totalAnsweredHistory = useMemo(() => {
+    return getStoredAnswers().length;
+  }, [isAnswerSubmitted]);
+
   useEffect(() => {
-    // Reset state on question change
+    // Reset option and timers when question changes
     setSelectedOption(null);
     setIsAnswerSubmitted(false);
     setShowHint(false);
+    setShowQuickTrickEarly(false);
     setQuestionStartTime(Date.now());
-  }, [activeQuestionIndex, selectedTopic, effectiveDifficulty]);
+  }, [activeQuestionIndex, selectedTopic, effectiveDifficulty, sessionSeed, initialQuestionToRetry]);
 
   const handleSelectOption = (index: number) => {
     if (isAnswerSubmitted) return;
     setSelectedOption(index);
+  };
+
+  const handleShuffleNewQuestion = () => {
+    if (initialQuestionToRetry && onClearRetryQuestion) {
+      onClearRetryQuestion();
+    }
+    startNewSession();
+    setSessionSeed(Date.now());
+    setActiveQuestionIndex(0);
   };
 
   const handleSubmitAnswer = () => {
@@ -104,7 +139,7 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
 
     setIsAnswerSubmitted(true);
 
-    // Save answer record
+    // Save answer record WITH full snapshot for history review
     const record: AnswerRecord = {
       questionId: currentQuestion.id,
       topic: currentQuestion.topic,
@@ -114,6 +149,7 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
       timeSpentSec,
       timestamp: Date.now(),
       pointsEarned,
+      questionSnapshot: currentQuestion,
     };
     saveAnswerRecord(record);
 
@@ -146,6 +182,9 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
   };
 
   const handleNextQuestion = () => {
+    if (initialQuestionToRetry && onClearRetryQuestion) {
+      onClearRetryQuestion();
+    }
     setActiveQuestionIndex((prev) => (prev + 1) % currentQuestionList.length);
   };
 
@@ -167,101 +206,156 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
         </div>
       )}
 
-      {/* Control Strip: Topic filters & Difficulty Mode */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Topic tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 text-xs">
+      {/* Mode Banner if retrying a question from History */}
+      {initialQuestionToRetry && (
+        <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between gap-3 text-xs text-indigo-900">
+          <div className="flex items-center gap-2 font-bold">
+            <RotateCcw className="w-4 h-4 text-indigo-600 animate-spin-once" />
+            <span>Mode Uji Ulang: Kamu sedang mengerjakan kembali soal dari Riwayat.</span>
+          </div>
           <button
-            onClick={() => { setSelectedTopic('all'); setActiveQuestionIndex(0); }}
-            className={`px-3 py-1.5 font-bold rounded-xl transition-colors whitespace-nowrap shrink-0 ${
-              selectedTopic === 'all'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
+            onClick={handleShuffleNewQuestion}
+            className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700"
           >
-            Semua Topik ({INITIAL_QUESTIONS.length})
+            Kembali ke Soal Acak
           </button>
-          <button
-            onClick={() => { setSelectedTopic('omnas'); setActiveQuestionIndex(0); }}
-            className={`px-3 py-1.5 font-bold rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1 ${
-              selectedTopic === 'omnas'
-                ? 'bg-amber-500 text-white shadow-xs'
-                : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
-            <span>Soal Resmi OMNAS (17)</span>
-          </button>
-          {TOPICS.map((topic) => {
-            const count = INITIAL_QUESTIONS.filter((q) => q.topic === topic.id).length;
-            const isSelected = selectedTopic === topic.id;
-            return (
-              <button
-                key={topic.id}
-                onClick={() => { setSelectedTopic(topic.id); setActiveQuestionIndex(0); }}
-                className={`px-3 py-1.5 font-bold rounded-xl transition-colors whitespace-nowrap shrink-0 ${
-                  isSelected
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {topic.name} ({count})
-              </button>
-            );
-          })}
         </div>
+      )}
 
-        {/* Difficulty Controls */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Adaptive vs Manual Mode Switch */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs">
+      {/* Control Strip: Topic filters, Shuffle & Difficulty Mode */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+        {/* Top action row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Topic tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 text-xs">
             <button
-              onClick={() => setDifficultyMode('adaptive')}
-              className={`px-2.5 py-1 font-bold rounded-lg transition-all flex items-center gap-1 ${
-                difficultyMode === 'adaptive'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Tingkat kesulitan menyesuaikan otomatis dengan kemampuanmu"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Adaptif Cerdas</span>
-            </button>
-            <button
-              onClick={() => setDifficultyMode('manual')}
-              className={`px-2.5 py-1 font-bold rounded-lg transition-all ${
-                difficultyMode === 'manual'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+              onClick={() => { setSelectedTopic('all'); setActiveQuestionIndex(0); }}
+              className={`px-3 py-1.5 font-bold rounded-xl transition-colors whitespace-nowrap shrink-0 ${
+                selectedTopic === 'all'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Pilih Manual
+              Semua Topik ({INITIAL_QUESTIONS.length}+)
             </button>
+            <button
+              onClick={() => { setSelectedTopic('omnas'); setActiveQuestionIndex(0); }}
+              className={`px-3 py-1.5 font-bold rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1 ${
+                selectedTopic === 'omnas'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+              <span>Soal Resmi OMNAS (17)</span>
+            </button>
+            {TOPICS.map((topic) => {
+              const count = INITIAL_QUESTIONS.filter((q) => q.topic === topic.id).length;
+              const isSelected = selectedTopic === topic.id;
+              return (
+                <button
+                  key={topic.id}
+                  onClick={() => { setSelectedTopic(topic.id); setActiveQuestionIndex(0); }}
+                  className={`px-3 py-1.5 font-bold rounded-xl transition-colors whitespace-nowrap shrink-0 ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {topic.name} ({count})
+                </button>
+              );
+            })}
           </div>
 
-          {difficultyMode === 'manual' && (
-            <select
-              value={manualDifficulty}
-              onChange={(e) => {
-                setManualDifficulty(e.target.value as DifficultyLevel);
-                setActiveQuestionIndex(0);
-              }}
-              className="px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-200 rounded-xl text-slate-800"
+          {/* Quick Shortcuts: Shuffle & History */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Shuffle New Random Question Button */}
+            <button
+              onClick={handleShuffleNewQuestion}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xl transition-colors shadow-2xs whitespace-nowrap"
+              title="Acak soal baru yang berbeda dari sesi sebelumnya"
             >
-              <option value="mudah">Mudah (+10 poin)</option>
-              <option value="sedang">Sedang (+20 poin)</option>
-              <option value="olimpiade">Olimpiade (+35 poin)</option>
-            </select>
-          )}
+              <Dices className="w-3.5 h-3.5 text-blue-600" />
+              <span>Acak Soal Baru</span>
+            </button>
 
-          {/* Quick Scratchpad Launcher */}
-          <button
-            onClick={() => setIsScratchpadOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors shadow-xs"
-          >
-            <PenTool className="w-3.5 h-3.5 text-blue-600" />
-            <span>Papan Coret-Coret</span>
-          </button>
+            {/* Jump to History Button */}
+            {onOpenHistory && (
+              <button
+                onClick={onOpenHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors whitespace-nowrap"
+                title="Buka riwayat soal yang pernah kamu kerjakan"
+              >
+                <History className="w-3.5 h-3.5 text-slate-600" />
+                <span>Riwayat ({totalAnsweredHistory})</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom controls row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
+          {/* Dynamic question indicator */}
+          <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px]">
+              Sesi Acak Aktif: Soal selalu berbeda tiap masuk aplikasi 
+              {unansweredCount > 0 && ` (${unansweredCount} belum pernah dijawab)`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Adaptive vs Manual Mode Switch */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl">
+              <button
+                onClick={() => setDifficultyMode('adaptive')}
+                className={`px-2.5 py-1 font-bold rounded-lg transition-all flex items-center gap-1 ${
+                  difficultyMode === 'adaptive'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Tingkat kesulitan menyesuaikan otomatis dengan kemampuanmu"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>Adaptif Cerdas</span>
+              </button>
+              <button
+                onClick={() => setDifficultyMode('manual')}
+                className={`px-2.5 py-1 font-bold rounded-lg transition-all ${
+                  difficultyMode === 'manual'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pilih Manual
+              </button>
+            </div>
+
+            {difficultyMode === 'manual' && (
+              <select
+                value={manualDifficulty}
+                onChange={(e) => {
+                  setManualDifficulty(e.target.value as DifficultyLevel);
+                  setActiveQuestionIndex(0);
+                }}
+                className="px-2.5 py-1 font-bold bg-white border border-slate-200 rounded-xl text-slate-800 text-xs"
+              >
+                <option value="mudah">Mudah (+10 XP)</option>
+                <option value="sedang">Sedang (+20 XP)</option>
+                <option value="olimpiade">Olimpiade (+35 XP)</option>
+              </select>
+            )}
+
+            {/* Quick Scratchpad Launcher */}
+            <button
+              onClick={() => setIsScratchpadOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors shadow-2xs"
+            >
+              <PenTool className="w-3.5 h-3.5 text-blue-600" />
+              <span>Coret-Coret</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -497,10 +591,16 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
           )}
         </div>
       ) : (
-        <div className="p-8 text-center bg-white rounded-2xl border border-slate-200">
+        <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 space-y-3">
           <p className="text-sm text-slate-500 font-medium">
-            Tidak ada soal untuk filter ini. Silakan pilih topik lain!
+            Tidak ada soal untuk filter ini. Silakan pilih topik lain atau acak soal baru!
           </p>
+          <button
+            onClick={handleShuffleNewQuestion}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700"
+          >
+            Muat Soal Acak Baru
+          </button>
         </div>
       )}
 

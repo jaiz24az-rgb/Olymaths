@@ -4,6 +4,7 @@ import {
   ActiveTab 
 } from './components/Navbar';
 import { PracticeArena } from './components/PracticeArena';
+import { QuestionHistoryView } from './components/QuestionHistoryView';
 import { CompetitionArena } from './components/CompetitionArena';
 import { CheatSheetView } from './components/CheatSheetView';
 import { DailyChallenge } from './components/DailyChallenge';
@@ -14,7 +15,7 @@ import { NotificationSettingsModal } from './components/NotificationSettingsModa
 import { BadgesModal } from './components/BadgesModal';
 import { ProfileModal } from './components/ProfileModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { UserProfile, DailyReminderConfig, Badge } from './types';
+import { UserProfile, DailyReminderConfig, Badge, Question } from './types';
 import { 
   getStoredProfile, 
   saveProfile, 
@@ -38,6 +39,9 @@ export default function App() {
 
   // In-app Notification Banner
   const [inAppAlert, setInAppAlert] = useState<{ title: string; body: string } | null>(null);
+
+  // Selected question to retry from history
+  const [questionToRetry, setQuestionToRetry] = useState<Question | null>(null);
 
   // Initial check on streak and periodic check for daily study reminder
   useEffect(() => {
@@ -111,6 +115,22 @@ export default function App() {
             onProfileUpdated={handleProfileUpdated}
             onOpenBadges={() => setIsBadgesModalOpen(true)}
             onOpenCheatSheet={() => setActiveTab('cheatsheet')}
+            onOpenHistory={() => setActiveTab('history')}
+            initialQuestionToRetry={questionToRetry}
+            onClearRetryQuestion={() => setQuestionToRetry(null)}
+          />
+        )}
+
+        {activeTab === 'history' && (
+          <QuestionHistoryView
+            onRetryQuestion={(question) => {
+              setQuestionToRetry(question);
+              setActiveTab('practice');
+            }}
+            onGoToPractice={() => {
+              setQuestionToRetry(null);
+              setActiveTab('practice');
+            }}
           />
         )}
 
