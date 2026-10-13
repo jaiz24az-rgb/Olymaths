@@ -1,0 +1,8 @@
+{
+  "name": "Remix MathOlympics Kids",
+  "description": "Gamified math platform for elementary students featuring adaptive exercises, offline mode, and comprehensive progress tracking for parents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

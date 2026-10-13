@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Remix MathOlympics Kids</title>
+    <meta name="description" content="Gamified math platform for elementary students featuring adaptive exercises, offline mode, and comprehensive progress tracking for parents." />
+    <meta property="og:title" content="Remix MathOlympics Kids" />
+    <meta property="og:description" content="Gamified math platform for elementary students featuring adaptive exercises, offline mode, and comprehensive progress tracking for parents." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Remix MathOlympics Kids" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      (function() {
+        // Suppress benign Vite HMR transport errors per environment guidelines
+        function isViteHmrError(err, str) {
+          var text = (str || '') + ' ' + (err?.message || '') + ' ' + (err?.stack || '');
+          return (
+            text.indexOf('createWebSocketModuleRunnerTransport') !== -1 ||
+            text.indexOf('WebSocket closed without opened') !== -1 ||
+            text.indexOf('failed to connect to websocket') !== -1 ||
+            (text.indexOf('[vite]') !== -1 && text.indexOf('websocket') !== -1) ||
+            (text.indexOf('@vite/client') !== -1 && text.indexOf('connect') !== -1)
+          );
+        }
+
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e && isViteHmrError(e.reason, String(e.reason || ''))) {
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('error', function(e) {
+          if (e && (isViteHmrError(e.error, e.message) || (e.filename && e.filename.indexOf('@vite/client') !== -1))) {
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        var origOnError = window.onerror;
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+          var detail = (msg || '') + ' ' + (url || '') + ' ' + (error?.stack || '');
+          if (isViteHmrError(error, detail)) {
+            return true;
+          }
+          if (origOnError) return origOnError.apply(this, arguments);
+        };
+
+        var origConsoleError = console.error;
+        console.error = function() {
+          var fullMsg = Array.prototype.slice.call(arguments).map(function(item) {
+            return item && item.stack ? item.stack : String(item);
+          }).join(' ');
+          if (isViteHmrError(null, fullMsg)) {
+            return;
+          }
+          origConsoleError.apply(console, arguments);
+        };
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
