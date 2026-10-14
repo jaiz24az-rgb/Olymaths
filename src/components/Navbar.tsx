@@ -10,12 +10,13 @@ import {
   Sparkles,
   BookOpen,
   Swords,
-  History
+  History,
+  Camera
 } from 'lucide-react';
 import { UserProfile, DailyReminderConfig } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 
-export type ActiveTab = 'practice' | 'history' | 'duel' | 'cheatsheet' | 'daily' | 'leaderboard' | 'analytics' | 'parent';
+export type ActiveTab = 'practice' | 'scanner' | 'history' | 'duel' | 'cheatsheet' | 'daily' | 'leaderboard' | 'analytics' | 'parent';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -63,6 +64,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             Arena Latihan
+          </button>
+          <button
+            onClick={() => onSelectTab('scanner')}
+            className={`transition-colors whitespace-nowrap shrink-0 pb-1 flex items-center gap-1 ${
+              activeTab === 'scanner'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 font-extrabold'
+                : 'hover:text-indigo-600 text-indigo-700 font-bold'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Pindai Soal Guru</span>
           </button>
           <button
             onClick={() => onSelectTab('history')}
@@ -203,6 +215,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           Arena Latihan
+        </button>
+        <button
+          onClick={() => onSelectTab('scanner')}
+          className={`px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0 flex items-center gap-1 ${
+            activeTab === 'scanner' ? 'bg-indigo-600 text-white shadow-xs font-bold' : 'text-indigo-700 bg-indigo-50 font-bold'
+          }`}
+        >
+          <Camera className="w-3.5 h-3.5" />
+          <span>Pindai Soal</span>
         </button>
         <button
           onClick={() => onSelectTab('history')}

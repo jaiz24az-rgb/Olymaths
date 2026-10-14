@@ -1,4 +1,4 @@
-import { UserProfile, AnswerRecord, DailyReminderConfig, Badge, TopicCategory, Question } from '../types';
+import { UserProfile, AnswerRecord, DailyReminderConfig, Badge, TopicCategory, Question, ScannedQuestionResult } from '../types';
 import { INITIAL_BADGES, LEVEL_TIERS } from '../data/badges';
 import { INITIAL_QUESTIONS } from '../data/questions';
 
@@ -6,6 +6,7 @@ const PROFILE_KEY = 'olimpiade_sd4_profile';
 const ANSWERS_KEY = 'olimpiade_sd4_answers';
 const BADGES_KEY = 'olimpiade_sd4_badges';
 const REMINDER_KEY = 'olimpiade_sd4_reminder';
+const SCANNED_QUESTIONS_KEY = 'olimpiade_sd4_scanned_questions';
 
 export const DEFAULT_PROFILE: UserProfile = {
   name: 'Ahmad Faiz',
@@ -92,6 +93,42 @@ export function clearAnswerHistory(): void {
     localStorage.removeItem(ANSWERS_KEY);
   } catch (e) {
     console.error('Failed to clear answer history', e);
+  }
+}
+
+export function getStoredScannedQuestions(): ScannedQuestionResult[] {
+  try {
+    const raw = localStorage.getItem(SCANNED_QUESTIONS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveScannedQuestion(item: ScannedQuestionResult): void {
+  try {
+    const list = getStoredScannedQuestions();
+    const enriched: ScannedQuestionResult = {
+      ...item,
+      id: item.id || `scan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      scannedAt: item.scannedAt || Date.now(),
+    };
+    list.unshift(enriched);
+    // Keep up to 50 scanned questions
+    localStorage.setItem(SCANNED_QUESTIONS_KEY, JSON.stringify(list.slice(0, 50)));
+  } catch (e) {
+    console.error('Failed to save scanned question', e);
+  }
+}
+
+export function deleteScannedQuestion(id: string): void {
+  try {
+    const list = getStoredScannedQuestions();
+    const filtered = list.filter((item) => item.id !== id);
+    localStorage.setItem(SCANNED_QUESTIONS_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.error('Failed to delete scanned question', e);
   }
 }
 

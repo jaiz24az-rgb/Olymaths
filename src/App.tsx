@@ -4,6 +4,7 @@ import {
   ActiveTab 
 } from './components/Navbar';
 import { PracticeArena } from './components/PracticeArena';
+import { CameraQuestionScanner } from './components/CameraQuestionScanner';
 import { QuestionHistoryView } from './components/QuestionHistoryView';
 import { CompetitionArena } from './components/CompetitionArena';
 import { CheatSheetView } from './components/CheatSheetView';
@@ -116,8 +117,19 @@ export default function App() {
             onOpenBadges={() => setIsBadgesModalOpen(true)}
             onOpenCheatSheet={() => setActiveTab('cheatsheet')}
             onOpenHistory={() => setActiveTab('history')}
+            onOpenScanner={() => setActiveTab('scanner')}
             initialQuestionToRetry={questionToRetry}
             onClearRetryQuestion={() => setQuestionToRetry(null)}
+          />
+        )}
+
+        {activeTab === 'scanner' && (
+          <CameraQuestionScanner
+            onPracticeQuestion={(question) => {
+              setQuestionToRetry(question);
+              setActiveTab('practice');
+            }}
+            onGoToHistory={() => setActiveTab('history')}
           />
         )}
 

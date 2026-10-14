@@ -2,12 +2,24 @@ import http from 'http';
 import path from 'path';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
+import { GoogleGenAI } from '@google/genai';
 import { INITIAL_QUESTIONS } from './src/data/questions';
 import { CompetitionRoom, RoomPlayer, Question } from './src/types';
 
 const app = express();
+app.use(express.json({ limit: '15mb' }));
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    },
+  },
+});
 
 const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -463,6 +475,134 @@ app.get('/api/health', (_req, res) => {
     roomsCount: rooms.size,
     onlineClients: wss.clients.size,
   });
+});
+
+// AI Question Scanner endpoint with Gemini 3.8 Flash
+app.post('/api/scan-question', async (req, res) => {
+  try {
+    const { imageBase64, mimeType = 'image/jpeg', studentNote = '' } = req.body;
+
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Foto soal belum disediakan.' });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ 
+        error: 'Kunci API Gemini belum tersedia di pengaturan server.' 
+      });
+    }
+
+    // Clean base64 string
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+
+    const promptText = `
+Kamu adalah Guru Ahli Olimpiade Matematika SD Kelas 4 yang sangat ramah, suportif, dan pintar menjelaskan logika konsep matematika kepada siswa sekolah dasar.
+Siswa baru saja mengambil foto soal matematika yang diberikan oleh gurunya di sekolah atau tempat les.
+
+Tugasmu:
+1. Bacalah gambar tersebut dengan sangat teliti (teks soal, angka, diagram geometri, tabel, pecahan, atau tulisan tangan guru jika ada).
+2. Tentukan topik soal: salah satu dari "bilangan", "pecahan", "geometri", "logika", atau "soal_cerita".
+3. Tentukan tingkat kesulitan: "mudah", "sedang", atau "olimpiade".
+4. Jelaskan apa tujuan pembelajaran atau konsep inti yang sedang diuji guru melalui soal ini.
+5. Hitung jawaban yang benar dengan 100% ketelitian.
+6. Buatlah pembahasan langkah demi langkah (stepByStepSolution) yang runtut, mudah dicerna anak kelas 4 SD, menyemangati, dan menggunakan analogi yang konkret.
+7. Berikan "Trik Cepat 10 Detik" (quickTrick) khas trik cerdas olimpiade untuk menyelesaikan soal semacam ini secara lebih cepat dan cerdas.
+8. Berikan peringatan "Jebakan / Kesalahan Umum" (commonMistakes) yang sering membuat siswa salah menghitung.
+9. Buat 1 soal tantangan latihan serupa (followUpQuestion) dengan 4 pilihan ganda (options A-D), correctIndex (0-3), petunjuk (hint), dan pembahasannya agar siswa bisa langsung mempraktikkan konsep.
+
+Format balasan HARUS berupa objek JSON valid dengan struktur:
+{
+  "rawQuestion": "Teks lengkap soal dari guru yang terbaca dari gambar",
+  "topic": "bilangan",
+  "difficulty": "sedang",
+  "teacherIntent": "Materi konsep yang diuji oleh guru",
+  "finalAnswer": "Jawaban akhir yang tepat dan lengkap dengan satuan",
+  "stepByStepSolution": "Pembahasan rinci, terstruktur, dan mudah dipahami",
+  "quickTrick": "Trik cerdas / cara kilat 10 detik khas olimpiade",
+  "commonMistakes": "Kesalahan yang sering dilakukan anak-anak pada soal ini",
+  "followUpQuestion": {
+    "question": "Soal latihan serupa untuk menguji pemahaman",
+    "options": ["Pilihan A", "Pilihan B", "Pilihan C", "Pilihan D"],
+    "correctIndex": 0,
+    "hint": "Petunjuk berpikir",
+    "explanation": "Pembahasan singkat soal latihan"
+  }
+}
+
+${studentNote ? `Catatan/kebingungan siswa saat mengerjakan: "${studentNote}"` : ''}
+
+Balas HANYA teks JSON murni tanpa markdown pembungkus.
+`;
+
+    // Try primary model and fallback models if temporary 503 high demand occurs
+    const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    let lastError: any = null;
+    let response: any = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        response = await ai.models.generateContent({
+          model: modelName,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: mimeType || 'image/jpeg',
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: promptText,
+              },
+            ],
+          },
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+
+        if (response && response.text) {
+          break; // successfully generated
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${modelName} returned error, attempting fallback...`, err?.message || err);
+        // Wait 800ms before attempting fallback model
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    }
+
+    if (!response || !response.text) {
+      throw lastError || new Error('Gagal mendapatkan respon dari AI.');
+    }
+
+    const text = response.text || '{}';
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      const cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
+      parsed = JSON.parse(cleanJson);
+    }
+
+    res.json({
+      success: true,
+      data: parsed,
+    });
+  } catch (err: any) {
+    console.error('Error in /api/scan-question:', err);
+    let userFriendlyMsg = 'Gagal memindai dan membahas soal dari guru.';
+    const rawMsg = String(err?.message || err);
+    if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
+      userFriendlyMsg = 'Layanan AI sedang mengalami lonjakan antrean sementara (503). Silakan tekan tombol "Coba Kirim Ulang" untuk mencoba kembali.';
+    } else if (rawMsg.includes('429') || rawMsg.includes('quota') || rawMsg.includes('RESOURCE_EXHAUSTED')) {
+      userFriendlyMsg = 'Batas kuota harian sementara tercapai. Mohon tunggu beberapa detik lalu coba lagi.';
+    }
+    res.status(503).json({
+      error: userFriendlyMsg,
+      original: rawMsg,
+    });
+  }
 });
 
 // Attach selective upgrade handler for WebSocket duel

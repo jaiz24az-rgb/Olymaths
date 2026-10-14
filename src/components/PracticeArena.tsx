@@ -15,7 +15,8 @@ import {
   Target,
   History,
   Dices,
-  RefreshCw
+  RefreshCw,
+  Camera
 } from 'lucide-react';
 import { Question, DifficultyLevel, TopicCategory, UserProfile, AnswerRecord } from '../types';
 import { INITIAL_QUESTIONS, TOPICS } from '../data/questions';
@@ -45,6 +46,7 @@ interface PracticeArenaProps {
   onOpenBadges: () => void;
   onOpenCheatSheet?: () => void;
   onOpenHistory?: () => void;
+  onOpenScanner?: () => void;
   initialQuestionToRetry?: Question | null;
   onClearRetryQuestion?: () => void;
 }
@@ -55,6 +57,7 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
   onOpenBadges,
   onOpenCheatSheet,
   onOpenHistory,
+  onOpenScanner,
   initialQuestionToRetry,
   onClearRetryQuestion,
 }) => {
@@ -268,8 +271,20 @@ export const PracticeArena: React.FC<PracticeArenaProps> = ({
             })}
           </div>
 
-          {/* Quick Shortcuts: Shuffle & History */}
+          {/* Quick Shortcuts: Shuffle, Scanner & History */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Open Scanner Button */}
+            {onOpenScanner && (
+              <button
+                onClick={onOpenScanner}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-xl transition-colors shadow-2xs whitespace-nowrap"
+                title="Pindai soal dari guru menggunakan kamera atau berkas foto"
+              >
+                <Camera className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Pindai Soal Guru</span>
+              </button>
+            )}
+
             {/* Shuffle New Random Question Button */}
             <button
               onClick={handleShuffleNewQuestion}

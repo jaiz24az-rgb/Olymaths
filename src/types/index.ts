@@ -34,6 +34,27 @@ export interface Question {
   svgData?: Record<string, any>;
 }
 
+export interface ScannedQuestionResult {
+  id?: string;
+  imageThumbnail?: string;
+  rawQuestion: string;
+  topic: TopicCategory;
+  difficulty: DifficultyLevel;
+  teacherIntent: string;
+  finalAnswer: string;
+  stepByStepSolution: string;
+  quickTrick: string;
+  commonMistakes?: string;
+  followUpQuestion?: {
+    question: string;
+    options: string[];
+    correctIndex: number;
+    hint: string;
+    explanation: string;
+  };
+  scannedAt: number;
+}
+
 export interface AnswerRecord {
   id?: string;
   questionId: string;
